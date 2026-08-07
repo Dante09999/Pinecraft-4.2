@@ -61,6 +61,39 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 # Version comparison which allows comparing 1.16.5 to 1.14.0 (for example)
 function version { echo "$@" | awk -F. '{ printf("%d%03d%03d%03d\n", $1,$2,$3,$4); }'; }
 
+# Function for finding optimal Java version based on Minecraft-version
+get_java_path() {
+    local target_mc="$1"
+    
+    # Java 25 for 26.1 or newer
+    if [[ "$target_mc" == "26.2" ]] || [[ "$target_mc" == "26.1" ]] || [[ "$target_mc" == *"26."* ]]; then
+        if [[ -x "/usr/lib/jvm/java-25-openjdk-arm64/bin/java" ]]; then
+            echo "/usr/lib/jvm/java-25-openjdk-arm64/bin/java"
+            return
+        fi
+    fi
+
+    # Java 21 for 1.20.5+ / 1.21+
+    if [[ "$target_mc" == "1.21" ]] || [[ "$target_mc" == "1.20.6" ]]; then
+        if [[ -x "/usr/lib/jvm/java-21-openjdk-arm64/bin/java" ]]; then
+            echo "/usr/lib/jvm/java-21-openjdk-arm64/bin/java"
+            return
+        fi
+    fi
+
+    # Java 17 for older versions like 1.20.1, 1.18, etc.
+    if [[ -x "/usr/lib/jvm/java-17-openjdk-arm64/bin/java" ]]; then
+        echo "/usr/lib/jvm/java-17-openjdk-arm64/bin/java"
+        return
+    elif [[ -x "/usr/lib/jvm/java-21-openjdk-arm64/bin/java" ]]; then
+        echo "/usr/lib/jvm/java-21-openjdk-arm64/bin/java"
+        return
+    fi
+
+    # Fallback to standard if nothing else is found
+    echo "java"
+}
+
 # Install the web interface
 #psi=1
 
@@ -88,6 +121,18 @@ if [[ $dialog == "" ]]; then
     echo "Success."
   fi
 fi
+
+
+for java_pkg in openjdk-17-jre-headless openjdk-21-jre-headless openjdk-25-jre-headless; do
+  if ! dpkg-query -W -f='${Status}' "$java_pkg" 2>/dev/null | grep -q "ok installed"; then
+    dialog --infobox "Installing $java_pkg..." 3 38
+    if [[ $updated == 0 ]]; then
+      apt-get update > /dev/null 2>&1
+      updated=1
+    fi
+    apt-get -y install "$java_pkg" > /dev/null 2>&1
+  fi
+done
 
 dialog --title "Pinecraft Installer $pcver" \
 --msgbox "
@@ -1134,6 +1179,9 @@ dialog --infobox "Creating scripts..." 3 34 ; sleep 1
 # Setup Aikars Flags
 aikars="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true"
 
+# Get the correct Java path for the selected Minecraft version
+SELECTED_JAVA=$(get_java_path "$mcver")
+
 # Create the run script
 echo '#!/bin/bash
 user=$(whoami); if [[ $user != "'${user}'" ]]; then echo "Cannot run as ${user} - expecting '${user}'"; exit; fi
@@ -1146,10 +1194,10 @@ else
     # Forge servers
     forge_args=$(ls ${instdir}libraries/net/minecraftforge/forge/*/unix_args.txt | head -n 1)
     forge_args="@${forge_args}"
-    echo "exec java ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
+    echo "exec '${SELECTED_JAVA}' ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
   else
     # Non-forge servers
-    echo "exec java ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
+    echo "exec '${SELECTED_JAVA}' ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
   fi
 fi
 chmod +x ${instdir}server
