@@ -125,7 +125,7 @@ if [[ $updated == 0 ]]; then
   updated=1
 fi
 
-dialog --infobox "Installing Java runtimes (17, 21, 25)..." 3 45 ;
+dialog --infobox "Installing Java runtimes (21 and 25)..." 3 45 ;
 sudo apt-get -y install openjdk-21-jre-headless openjdk-25-jre-headless > /dev/null 2>&1
 
 # Verify at least one Java installation is active
