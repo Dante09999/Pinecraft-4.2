@@ -181,37 +181,9 @@ install_java_runtime() {
  fi
 }
 
-for major in 17 21 25; do
- if ! install_java_runtime "$major"; then
-   dialog --title "Error" \
-     --msgbox "\nFailed to download Java ${major}. Please check your network connection and try again." 8 50
-   echo
-   echo
-   echo "Failed."
-   echo
-   exit 0
- fi
-done
-
-java_home="/opt/java/jdk-17"
-java_bin="$java_home/bin/java"
-
-if [[ ! -x "$java_bin" ]]; then
- dialog --title "Error" \
-   --msgbox "\nJava installation failed. Please install the latest JRE first and try again." 8 50
- echo
- echo
- echo "Failed."
- echo
- exit 0
-fi
-
-export JAVA_HOME="$java_home"
-export PATH="$java_home/bin:$PATH"
-
 if [ $(dpkg-query -W -f='${Status}' git 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
-  dialog --infobox "Installing git..." 3 34 ;
-  if [[ $updated == 0 ]]; then
+ dialog --infobox "Installing git..." 3 34 ;
+ if [[ $updated == 0 ]]; then
     apt-get update > /dev/null 2>&1
     updated=1
   fi
@@ -931,6 +903,44 @@ fi
 ###############################################
 # Finished Asking Questions: Begin Installation
 ###############################################
+
+case "$mcver" in
+  "26.2")
+    required_java_major=25
+    ;;
+  "1.20.6"|"1.21")
+    required_java_major=21
+    ;;
+  *)
+    required_java_major=17
+    ;;
+esac
+
+if ! install_java_runtime "$required_java_major"; then
+  dialog --title "Error" \
+    --msgbox "\nFailed to download Java ${required_java_major}. Please check your network connection and try again." 8 50
+  echo
+  echo
+  echo "Failed."
+  echo
+  exit 0
+fi
+
+java_home="/opt/java/jdk-${required_java_major}"
+java_bin="$java_home/bin/java"
+
+if [[ ! -x "$java_bin" ]]; then
+ dialog --title "Error" \
+   --msgbox "\nJava installation failed. Please install Java ${required_java_major} first and try again." 8 50
+  echo
+  echo
+  echo "Failed."
+  echo
+  exit 0
+fi
+
+export JAVA_HOME="$java_home"
+export PATH="$java_home/bin:$PATH"
 
 if [[ $upgrade == 1 ]] || [[ $replace == 1 ]]; then
   if [[ -e ${instdir}stop ]]; then
