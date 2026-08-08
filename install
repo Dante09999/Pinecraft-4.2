@@ -985,9 +985,11 @@ aikars="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+U
 # Create the run script with dynamic Java selection
 echo '#!/bin/bash
 user=$(whoami); if [[ $user != "'${user}'" ]]; then echo "Cannot run as ${user} - expecting '${user}'"; exit; fi
-cd "$(dirname "$0")"' > ${instdir}server
+cd "$(dirname "$0")"
 
-JAVA_EXEC="/usr/bin/java" # Default fallback
+# Check for available Java binaries in the system
+JAVA_EXEC="/usr/bin/java"
+
 if [[ -x "/usr/lib/jvm/java-25-openjdk-arm64/bin/java" ]]; then
     JAVA_25="/usr/lib/jvm/java-25-openjdk-arm64/bin/java"
 elif [[ -x "/usr/lib/jvm/java-25-openjdk-amd64/bin/java" ]]; then
@@ -1006,14 +1008,14 @@ elif [[ -x "/usr/lib/jvm/java-17-openjdk-amd64/bin/java" ]]; then
     JAVA_17="/usr/lib/jvm/java-17-openjdk-amd64/bin/java"
 fi
 
-# Match Minecraft version to Java version
+# Check the Minecraft version and select the appropriate Java version
 if [[ "'${mcver}'" == "26.2" ]] && [[ -n "$JAVA_25" ]]; then
     JAVA_EXEC="$JAVA_25"
 elif [[ "'${mcver}'" == "1.21" || "'${mcver}'" == "1.20.6" ]] && [[ -n "$JAVA_21" ]]; then
     JAVA_EXEC="$JAVA_21"
 elif [[ -n "$JAVA_17" ]]; then
     JAVA_EXEC="$JAVA_17"
-fi
+fi' > ${instdir}server
 
 if [[ $flavor == "Cuberite" ]]; then
   echo ${instdir}cuberite/Cuberite >> ${instdir}server
@@ -1021,9 +1023,9 @@ else
   if [[ $flavor == "Forge" ]]; then
     forge_args=$(ls ${instdir}libraries/net/minecraftforge/forge/*/unix_args.txt | head -n 1)
     forge_args="@${forge_args}"
-    echo "exec \$JAVA_EXEC ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
+    echo 'exec "$JAVA_EXEC" '"${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
   else
-    echo "exec \$JAVA_EXEC ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
+    echo 'exec "$JAVA_EXEC" '"${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
   fi
 fi
 chmod +x ${instdir}server
