@@ -119,98 +119,95 @@ dialog --title "Pinecraft Installer $pcver" \
 
 dialog --infobox "Checking dependencies..." 3 34 ; sleep 2
 
-javaminver=8; # The minimum version of Java for Minecraft Server to run
-javamaxver=21; # The current max version available in known repositories that Minecraft Server can run on.
-
 if [[ $updated == 0 ]]; then
-  dialog --infobox "Updating repositories..." 3 34 ;
-  apt-get update > /dev/null 2>&1
-  updated=1
+ dialog --infobox "Updating repositories..." 3 34 ;
+ apt-get update > /dev/null 2>&1
+ updated=1
 fi
 
-if type -p java > /dev/null; then
-  _java=java
-elif [[ -n "$JAVA_HOME" ]] && [[ -x "$JAVA_HOME/bin/java" ]];  then
-    _java="$JAVA_HOME/bin/java"
+if [ $(dpkg-query -W -f='${Status}' wget 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
+ dialog --infobox "Installing wget..." 3 34 ;
+ if [[ $updated == 0 ]]; then
+   apt-get update > /dev/null 2>&1
+   updated=1
+ fi
+ apt-get -y install wget > /dev/null 2>&1
 fi
 
-vercount=javamaxver
-(( ++vercount ))
-while (( --vercount >= $javaminver )); do
-  javaver=0
-  if [[ "$_java" ]]; then
-    javaver=$("$_java" -version 2>&1 | awk -F '"' '/version/ {print $2}')
-  fi
+java_install_root="/opt/java"
+mkdir -p "$java_install_root"
 
-  ver=0
-  for i in $(echo $javaver | tr "." "\n")
-  do
-    if [[ $ver == 0 ]]; then
-      ver=$i
-    else
-      subver=$i
-      break
-    fi
-  done
+install_java_runtime() {
+ local major="$1"
+ local java_home="$java_install_root/jdk-${major}"
+ local java_bin="$java_home/bin/java"
 
-  result=$(dpkg-query -W --showformat='${Status}\n' openjdk-${vercount}-jre-headless | grep "install ok installed")
-  if [ ! "$result" = "" ]; then
-    break
-  fi
+ if [[ -x "$java_bin" ]]; then
+   return 0
+ fi
 
-  if (( $ver < $javamaxver )); then
-    dialog --infobox "Trying to install JRE ${vercount}..." 3 38 ;
-    apt-get -y install openjdk-${vercount}-jre-headless > /dev/null 2>&1
-  fi
+ local arch
+ case $(uname -m) in
+   x86_64|amd64)
+     arch="x64"
+     ;;
+   aarch64|arm64)
+     arch="aarch64"
+     ;;
+   armv7l|armv6l)
+     arch="arm"
+     ;;
+   *)
+     arch="x64"
+     ;;
+ esac
 
-  result=$(dpkg-query -W --showformat='${Status}\n' openjdk-${vercount}-jre-headless | grep "install ok installed")
-  if [ ! "$result" = "" ]; then
-    break
-  fi
+ local download_url="https://api.adoptium.net/v3/binary/latest/${major}/ga/linux/${arch}/jdk/hotspot/normal/eclipse"
+ dialog --infobox "Downloading Java ${major}..." 3 40
+ if ! wget -O "${java_install_root}/jdk-${major}.tar.gz" "$download_url" > /dev/null 2>&1; then
+   echo "Failed to download Java ${major}."
+   return 1
+ fi
 
+ rm -rf "$java_home"
+ mkdir -p "$java_home"
+ tar -xzf "${java_install_root}/jdk-${major}.tar.gz" -C "$java_home" --strip-components=1
+ rm -f "${java_install_root}/jdk-${major}.tar.gz"
+ chmod +x "$java_bin"
+
+ if [[ ! -x "$java_bin" ]]; then
+   echo "Failed to install Java ${major}."
+   return 1
+ fi
+}
+
+for major in 17 21 25; do
+ if ! install_java_runtime "$major"; then
+   dialog --title "Error" \
+     --msgbox "\nFailed to download Java ${major}. Please check your network connection and try again." 8 50
+   echo
+   echo
+   echo "Failed."
+   echo
+   exit 0
+ fi
 done
 
-# Java installed?
-if type -p java > /dev/null; then
-  _java=java
-elif [[ -n "$JAVA_HOME" ]] && [[ -x "$JAVA_HOME/bin/java" ]];  then
-    _java="$JAVA_HOME/bin/java"
-else
-  dialog --title "Error" \
-    --msgbox "\nJava installation failed. Please install the latest JRE first and try again." 8 50
-  echo
-  echo
-  echo "Failed."
-  echo
-  exit 0
+java_home="/opt/java/jdk-17"
+java_bin="$java_home/bin/java"
+
+if [[ ! -x "$java_bin" ]]; then
+ dialog --title "Error" \
+   --msgbox "\nJava installation failed. Please install the latest JRE first and try again." 8 50
+ echo
+ echo
+ echo "Failed."
+ echo
+ exit 0
 fi
 
-javaver=0
-if [[ "$_java" ]]; then
-  javaver=$("$_java" -version 2>&1 | awk -F '"' '/version/ {print $2}')
-fi
-
-ver=0
-for i in $(echo $javaver | tr "." "\n")
-do
-  if [[ $ver == 0 ]]; then
-    ver=$i
-  else
-    subver=$i
-    break
-  fi
-done
-
-# minimum version of Java supported by Minecraft Server
-if [[ $ver > 8 ]] || [[ $ver == 1 ]] && [[ $subver > 8 ]]; then
-  dialog --title "Error" \
-      --msgbox "\n`which java` is version ${javaver}. You'll need a newer version of JRE." 8 50
-  echo
-  echo
-  echo "Failed."
-  echo
-  exit 0
-fi
+export JAVA_HOME="$java_home"
+export PATH="$java_home/bin:$PATH"
 
 if [ $(dpkg-query -W -f='${Status}' git 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
   dialog --infobox "Installing git..." 3 34 ;
@@ -255,21 +252,6 @@ if [ $(dpkg-query -W -f='${Status}' cron 2>/dev/null | grep -c "ok installed") -
 fi
 
 mcver="1.16.5" # Set a default old version
-if (( $ver >= 25 )); then # Java version 25+ allows 26.1+
-  mcver="26.2"
-elif (( $ver >= 21 )); then # Java version 21+ allows 1.20.6+
-  mcver="1.21"
-elif (( $ver >= 17 )); then # Java version 17+ allows 1.18.x-1.20.4
-  mcver="1.20.4"
-elif (( $ver >= 16 )); then # Java version 16+ allows 1.17.x
-  mcver="1.17.1"
-fi
-
-if (( $ver < 21 )); then
-dialog --title "Java $ver" --msgbox "
-Your installed version of Java ($ver) can only support up to Minecraft $mcver. To install a newer version of Minecraft, please see the Pinecraft documentation to obtain the recommended Base OS.
-" 12 48
-fi
 
 # Username may be provided on CLI as in 1.0
 user=$1
@@ -485,6 +467,33 @@ if [[ $upgrade == 0 ]]; then
 
 fi
 
+required_java_major=17
+case "$mcver" in
+  "26.2")
+    required_java_major=25
+    ;;
+  "1.20.6"|"1.21")
+    required_java_major=21
+    ;;
+  *)
+    required_java_major=17
+    ;;
+esac
+
+java_home="/opt/java/jdk-${required_java_major}"
+java_bin="${java_home}/bin/java"
+if [[ ! -x "$java_bin" ]]; then
+  dialog --title "Error" \
+    --msgbox "\nUnable to locate Java ${required_java_major} at ${java_home}." 8 50
+  echo
+  echo
+  echo "Failed."
+  echo
+  exit 0
+fi
+
+export JAVA_HOME="$java_home"
+export PATH="$java_home/bin:$PATH"
 
 # https://www.minecraft.net/en-us/download/server
 # https://mcversions.net/
@@ -1016,7 +1025,7 @@ elif [[ $flavor == "Cuberite" ]]; then
   sh minecraft.sh -m Release -t 1
   cuberiteresponse=$?
 else
-  java -Xmx500M -jar minecraft.jar $switches > /dev/null 2&>1
+  $java_bin -Xmx500M -jar minecraft.jar $switches > /dev/null 2&>1
 fi
 
 if [[ $flavor == "Cuberite" ]]; then
@@ -1148,10 +1157,10 @@ else
     # Forge servers
     forge_args=$(ls ${instdir}libraries/net/minecraftforge/forge/*/unix_args.txt | head -n 1)
     forge_args="@${forge_args}"
-    echo "exec java ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
+    echo "exec ${java_bin} ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
   else
     # Non-forge servers
-    echo "exec java ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
+    echo "exec ${java_bin} ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
   fi
 fi
 chmod +x ${instdir}server
