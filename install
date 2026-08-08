@@ -119,98 +119,27 @@ dialog --title "Pinecraft Installer $pcver" \
 
 dialog --infobox "Checking dependencies..." 3 34 ; sleep 2
 
-javaminver=8; # The minimum version of Java for Minecraft Server to run
-javamaxver=21; # The current max version available in known repositories that Minecraft Server can run on.
-
 if [[ $updated == 0 ]]; then
   dialog --infobox "Updating repositories..." 3 34 ;
   apt-get update > /dev/null 2>&1
   updated=1
 fi
 
-if type -p java > /dev/null; then
-  _java=java
-elif [[ -n "$JAVA_HOME" ]] && [[ -x "$JAVA_HOME/bin/java" ]];  then
-    _java="$JAVA_HOME/bin/java"
-fi
+dialog --infobox "Installing Java runtimes (17, 21, 25)..." 3 45 ;
+apt-get -y install openjdk-17-jre-headless openjdk-21-jre-headless openjdk-25-jre-headless > /dev/null 2>&1
 
-vercount=javamaxver
-(( ++vercount ))
-while (( --vercount >= $javaminver )); do
-  javaver=0
-  if [[ "$_java" ]]; then
-    javaver=$("$_java" -version 2>&1 | awk -F '"' '/version/ {print $2}')
-  fi
-
-  ver=0
-  for i in $(echo $javaver | tr "." "\n")
-  do
-    if [[ $ver == 0 ]]; then
-      ver=$i
-    else
-      subver=$i
-      break
-    fi
-  done
-
-  result=$(dpkg-query -W --showformat='${Status}\n' openjdk-${vercount}-jre-headless | grep "install ok installed")
-  if [ ! "$result" = "" ]; then
-    break
-  fi
-
-  if (( $ver < $javamaxver )); then
-    dialog --infobox "Trying to install JRE ${vercount}..." 3 38 ;
-    apt-get -y install openjdk-${vercount}-jre-headless > /dev/null 2>&1
-  fi
-
-  result=$(dpkg-query -W --showformat='${Status}\n' openjdk-${vercount}-jre-headless | grep "install ok installed")
-  if [ ! "$result" = "" ]; then
-    break
-  fi
-
-done
-
-# Java installed?
-if type -p java > /dev/null; then
-  _java=java
-elif [[ -n "$JAVA_HOME" ]] && [[ -x "$JAVA_HOME/bin/java" ]];  then
-    _java="$JAVA_HOME/bin/java"
-else
+# Verify at least one Java installation is active
+if ! type -p java > /dev/null && [[ -z "$JAVA_HOME" ]]; then
   dialog --title "Error" \
-    --msgbox "\nJava installation failed. Please install the latest JRE first and try again." 8 50
-  echo
+    --msgbox "\nJava installation failed. Please check your package repositories." 8 50
   echo
   echo "Failed."
   echo
   exit 0
 fi
 
-javaver=0
-if [[ "$_java" ]]; then
-  javaver=$("$_java" -version 2>&1 | awk -F '"' '/version/ {print $2}')
-fi
-
-ver=0
-for i in $(echo $javaver | tr "." "\n")
-do
-  if [[ $ver == 0 ]]; then
-    ver=$i
-  else
-    subver=$i
-    break
-  fi
-done
-
-# minimum version of Java supported by Minecraft Server
-if [[ $ver > 8 ]] || [[ $ver == 1 ]] && [[ $subver > 8 ]]; then
-  dialog --title "Error" \
-      --msgbox "\n`which java` is version ${javaver}. You'll need a newer version of JRE." 8 50
-  echo
-  echo
-  echo "Failed."
-  echo
-  exit 0
-fi
+# Set maximum assumed version for logic down below
+ver=25
 
 if [ $(dpkg-query -W -f='${Status}' git 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
   dialog --infobox "Installing git..." 3 34 ;
@@ -231,10 +160,6 @@ if [ $(dpkg-query -W -f='${Status}' screen 2>/dev/null | grep -c "ok installed")
   apt-get -y install screen > /dev/null 2>&1
 fi
 
-# wget is used to download each server installer
-# I don't distribute the installers with Pinecraft directly since
-# Minecraft itself is not open source.
-# The Radxa ROCK 3A does not have wget pre-installed, so I'll install it if it doesn't exist.
 if [ $(dpkg-query -W -f='${Status}' wget 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
   dialog --infobox "Installing wget..." 3 34 ;
   if [[ $updated == 0 ]]; then
@@ -244,7 +169,6 @@ if [ $(dpkg-query -W -f='${Status}' wget 2>/dev/null | grep -c "ok installed") -
   apt-get -y install wget > /dev/null 2>&1
 fi
 
-# crontab isn't included on Radxa ROCK 3A ... add it.
 if [ $(dpkg-query -W -f='${Status}' cron 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
   dialog --infobox "Installing cron..." 3 34 ;
   if [[ $updated == 0 ]]; then
@@ -316,8 +240,6 @@ do
 
 done
 
-
-
 instdir="/home/$user/minecraft/"
 
 upgrade=0
@@ -371,8 +293,6 @@ else
   exit 1
 fi
 
-
-
 # Get the level seed, but only if this is a new install
 if [[ $upgrade == 0 ]]; then
   exec 3>&1
@@ -425,7 +345,7 @@ if [[ $upgrade == 0 ]]; then
       ;;
     E)
       seed="2151901553968352745"
-      mcver="1.9.4" # Was actually part of 1.7.3 but that was a beta client, and Spigot only goes back to 1.9. Probably not usable?
+      mcver="1.9.4"
       ;;
     F)
       seed="7000"
@@ -433,15 +353,15 @@ if [[ $upgrade == 0 ]]; then
       ;;
     G)
       seed="-8880302588844065321"
-      mcver="1.9.4" # Originally on 1.9
+      mcver="1.9.4"
       ;;
     H)
       seed="throwlow"
-      mcver="1.12.2" # Originally on 1.12
+      mcver="1.12.2"
       ;;
     I)
       seed="6073041046072376055"
-      mcver="1.14.4" # OP didn't say what version, so I have to guess
+      mcver="1.14.4"
       ;;
     J)
       seed="673900667"
@@ -453,11 +373,11 @@ if [[ $upgrade == 0 ]]; then
       ;;
     L)
       seed="-5181140359215069925"
-      mcver="1.9.4" # Was on 1.8 but Spigot only goes back to 1.9
+      mcver="1.9.4"
       ;;
     M)
       seed="1785852800490497919"
-      mcver="1.9.4" # Was on 1.8 but Spigot only goes back to 1.9
+      mcver="1.9.4"
       ;;
     N)
       seed="1083719637794"
@@ -477,7 +397,6 @@ if [[ $upgrade == 0 ]]; then
     exit 1
   fi
 
-  # Input custom seed
   if [[ $seed == "custom" ]]; then
     seed=$(dialog --stdout --title "Custom World Seed" \
       --inputbox "Enter your custom world seed" 8 50)
@@ -485,9 +404,6 @@ if [[ $upgrade == 0 ]]; then
 
 fi
 
-
-# https://www.minecraft.net/en-us/download/server
-# https://mcversions.net/
 if [[ $mcver == "26.2" ]]; then
   vanilla="https://piston-data.mojang.com/v1/objects/823e2250d24b3ddac457a60c92a6a941943fcd6a/server.jar"
 elif [[ $mcver == "1.21" ]]; then
@@ -517,14 +433,11 @@ elif [[ $mcver == "1.18" ]]; then
 elif [[ $mcver == "1.17.1" ]]; then
   vanilla="https://launcher.mojang.com/v1/objects/a16d67e5807f57fc4e550299cf20226194497dc2/server.jar"
 elif [[ $mcver == "1.17" ]]; then
-  # 1.17
   vanilla="https://launcher.mojang.com/v1/objects/0a269b5f2c5b93b1712d0f5dc43b6182b9ab254e/server.jar"
 else
-  # 1.16.5
   vanilla="https://launcher.mojang.com/v1/objects/1b557e7b033b583cd9f66746b7a9ab1ec1673ced/server.jar"
 fi
 flavor=""
-
 
 declare -a flavors=()
 
@@ -532,7 +445,6 @@ if [[ $mcverANY == "1" ]] || [[ $mcver == "1.17.1" ]] || [[ $mcver == "1.17" ]] 
   flavors+=("P" "Paper (Default, ${mcver})")
 fi
 
-# Supports 1.14+
 if [[ $mcverANY == "1" ]] || [ $(version $mcver) -ge $(version "1.14.0") ]; then
   flavors+=("F" "Fabric (${mcver})")
 fi
@@ -541,12 +453,10 @@ if [[ $mcverANY == "1" ]] || [[ $mcver == "1.16.5" ]] || [[ $mcver == "1.17.1" ]
   flavors+=("R" "Forge (${mcver})")
 fi
 
-# Supports 1.9+
 if [[ $mcverANY == "1" ]] || [ $(version $mcver) -ge $(version "1.9") ]; then
   flavors+=("S" "Spigot (${mcver})")
 fi
 
-# 1.12 only
 if [[ $mcverANY == "1" ]] || [[ $mcver == "1.12.2" ]]; then
   flavors+=("C" "Cuberite (1.12)")
 fi
@@ -561,23 +471,18 @@ result=$(dialog --title "Pinecraft Installer $pcver" --menu "Choose your Minecra
 if [[ $? == 0 ]]; then
   case $result in
     S)
-      # https://hub.spigotmc.org/jenkins/job/BuildTools/
-      # NOTE: BuildTools (Spigot) AUTOMATICALLY ensures the correct Minecraft version is installed (see switches below)
-      #       No need to update the script manually.
       flavor="Spigot"
       url="https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar"
       jarname="spigot-*.jar"
       switches="--rev ${mcver}"
       ;;
     F)
-      # https://fabricmc.net/use/
       flavor="Fabric"
       url="https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.0/fabric-installer-1.0.0.jar"
       jarname="fabric-server-launch.jar"
       switches="server -mcversion ${mcver} -downloadMinecraft"
       ;;
     R)
-      # https://files.minecraftforge.net/net/minecraftforge/forge/
       flavor="Forge"
       if [[ $mcver == "26.2" ]]; then
         url="https://maven.minecraftforge.net/net/minecraftforge/forge/26.2-65.1.0/forge-26.2-65.1.0-installer.jar"
@@ -620,7 +525,6 @@ if [[ $? == 0 ]]; then
       switches=""
       ;;
     P)
-      # https://papermc.io/downloads
       flavor="Paper"
       if [[ $mcver == "26.2" ]]; then
         url="https://fill-data.papermc.io/v1/objects/3ec81e3ea50cc6090b94aab024491846a202702e8a874308a5d7510f6b3aa012/paper-26.2-111.jar"
@@ -660,7 +564,7 @@ if [[ $? == 0 ]]; then
       ;;
     C)
       flavor="Cuberite"
-      mcver="1.12" # Cuberite is a whole other beast
+      mcver="1.12"
       script="https://compile.cuberite.org"
       executable="Cuberite"
       compiler=1;
@@ -745,8 +649,6 @@ else
   exit 1
 fi
 
-
-
 dialog --title "End-User License Agreement"  --yesno "In order to proceed, you must read and accept the EULA at https://account.mojang.com/documents/minecraft_eula\n\nDo you accept the EULA?" 8 60
 
   case $? in
@@ -762,23 +664,19 @@ dialog --title "End-User License Agreement"  --yesno "In order to proceed, you m
    exit 1 ;;
   esac
 
-
-
-
-# Gather some info about your system which will be used to determine the config
 revision=$(cat /proc/cpuinfo | grep 'Revision' | awk '{print $3}')
 if [[ $revision == "" ]]; then
   revision=$(cat /proc/cpuinfo | grep 'Hardware' | awk '{print $4}')
 fi
-board="Unknown" # Default will be overridden if determined
-memtotal=$(cat /proc/meminfo | grep MemTotal | awk '{print $2}') # Amount of memory in KB
-memavail=$(cat /proc/meminfo | grep MemAvailable | awk '{print $2}') # Amount of memory in KB
-memvariance=$(($memtotal - $memavail)) # Figure out how much memory is being used so we can make dynamic decisions for this board
-mem=$(( (($memtotal - $memvariance) / 1024) - 518)) # Amount of memory in MB
-memreservation=$((($memavail * 20/100) / 1024)) # Reserve memory for system (Failure to do this will cause "Error occurred during initialization of VM")
-gamemem=$(($mem - $memreservation)) # Calculate how much memory we can give to the game server (in MB)
-gamememMIN=$((($mem * 80/100) - 1024)) # Figure a MINIMUM amount of memory to allocate
-# Seriously, if you have 100 GB RAM, we don't need more than 12 of it
+board="Unknown"
+memtotal=$(cat /proc/meminfo | grep MemTotal | awk '{print $2}')
+memavail=$(cat /proc/meminfo | grep MemAvailable | awk '{print $2}')
+memvariance=$(($memtotal - $memavail))
+mem=$(( (($memtotal - $memvariance) / 1024) - 518))
+memreservation=$((($memavail * 20/100) / 1024))
+gamemem=$(($mem - $memreservation))
+gamememMIN=$((($mem * 80/100) - 1024))
+
 if (( $gamemem > 12000 )); then
     gamemem=12288
     gamememMIN=1500
@@ -836,8 +734,6 @@ elif [[ "$revision" == *"VIM4" ]]; then
   board='Khadas VIM4'
   boardnum=3
   oc_friendly="Not Required"
-
-
 fi
 
 if (( $gamemem > 3800 )); then
@@ -879,16 +775,6 @@ dialog --title "Pinecraft Installer $pcver"  --yesno "Automatically load the ser
    ;;
   esac
 
-#dialog --title "Pinecraft Installer $pcver"  --yesno "Install Pinecraft Settings Interface?" 6 60
-#  case $? in
-#  0)
-#   psi=1
-#   ;;
-#  1)
-#   psi=0
-#   ;;
-#  esac
-
 dialog --title "Information" \
 --msgbox "
 Detected Hardware:
@@ -917,7 +803,6 @@ if [[ ! $oc_freq == 0 ]]; then
    exit 1 ;;
   esac
 fi
-
 
 ###############################################
 # Finished Asking Questions: Begin Installation
@@ -948,7 +833,6 @@ if [[ $upgrade == 1 ]]; then
 fi
 mkdir src && cd src
 
-# Install the tools needed to compile C code
 if [[ $compiler == 1 ]]; then
 
   if [ $(dpkg-query -W -f='${Status}' gcc 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
@@ -980,8 +864,6 @@ if [[ $compiler == 1 ]]; then
 
 fi
 
-
-# The server version requires the supplemental download of the vanilla server
 if [[ "$dlvanilla" = "1" ]]; then
   dialog --infobox "Downloading Vanilla..." 3 34 ;
   wget $vanilla -O ${instdir}server.jar > /dev/null 2>&1
@@ -990,27 +872,18 @@ fi
 dialog --infobox "Downloading ${flavor}..." 3 34 ; sleep 1
 
 if [[ $jarname != "" ]]; then
-
   wget $url -O minecraft.jar > /dev/null 2>&1
-
 elif [[ $script != "" ]]; then
-
   wget $script -O minecraft.sh > /dev/null 2>&1
-
 else
-
-  # This should never happen. No URL or Script for selection
-  echo
   echo
   echo "Died."
   echo
   exit 0
-
 fi
 
 dialog --infobox "Installing ${flavor}..." 3 34 ;
 if [[ $url == $vanilla ]]; then
-  # Vanilla doesn't need to be compiled, just copy the file
   cp minecraft.jar server.jar
 elif [[ $flavor == "Cuberite" ]]; then
   sh minecraft.sh -m Release -t 1
@@ -1025,7 +898,6 @@ if [[ $flavor == "Cuberite" ]]; then
     dialog --title "Error" \
       --msgbox "\nSadly, it appears compiling failed." 8 50
     echo
-    echo
     echo "Failed."
     echo
     exit 0
@@ -1035,14 +907,11 @@ if [[ $flavor == "Cuberite" ]]; then
 
 else
 
-  # The installer also created or obtained the Minecraft server.jar file. Include it.
   if [[ -e ${instdir}src/server.jar ]]; then
     cp -f ${instdir}src/server.jar $instdir
   fi
 
-  # Fabric and Forge use a libraries folder, so we'll keep that.
   if [[ -d ${instdir}src/libraries ]]; then
-    # Move existing Libraries folder before replacing
     if [[ -e ${instdir}libraries ]]; then
       mv ${instdir}libraries ${instdir}libraries~backup_$(date +%Y-%m-%d_%H-%M-%S)
     fi
@@ -1053,8 +922,6 @@ else
   fi
 
   if [[ $flavor == "Forge" ]]; then
-    # The forge installer removes itself and creates instead a minecraft.jar file
-    # Use this instead to measure whether compile was successful
     jarname="minecraft.jar"
   fi
 
@@ -1062,7 +929,6 @@ else
   if [[ $jarfile == "" ]]; then
     dialog --title "Error" \
       --msgbox "\nSadly, it appears compiling failed." 8 50
-    echo
     echo
     echo "Failed."
     echo
@@ -1075,10 +941,8 @@ else
 
 fi
 
-
 if [[ $psi == 1 ]]; then
 
-  # PHP interpreter / server for Pinecraft configuration interface
   if [ $(dpkg-query -W -f='${Status}' php 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
     dialog --infobox "Installing PHP..." 3 34 ;
     if [[ $updated == 0 ]]; then
@@ -1093,39 +957,22 @@ if [[ $psi == 1 ]]; then
   fi
 
   cp ${base}/assets/psi/* /etc/pinecraft/psi/
-
   printf '{"pcver":"%s","instdir":"%s","flavor":"%s"}\n' "$pcver" "$instdir" "$flavor" > /etc/pinecraft/psi/psi.json
-
   chown -R $user:$user /etc/pinecraft/
 fi
 
-
-###############################################
-# Patch Minecraft against exploit within Log4j
-# See https://www.minecraft.net/en-us/article/important-message--security-vulnerability-java-edition?ref=launcher
-###############################################
-
-# This exploit was patched in 1.18.1, so we only have to deal with older releases.
-
-# 1.17-1.18
+# Log4j Patch
 if [ $(version $mcver) -ge $(version "1.17") ] && [ $(version $mcver) -le $(version "1.18") ]; then
   cli_args="-Dlog4j2.formatMsgNoLookups=true"
 fi
-# 1.12-1.16.5
 if [ $(version $mcver) -ge $(version "1.12") ] && [ $(version $mcver) -le $(version "1.16.5") ]; then
   wget https://launcher.mojang.com/v1/objects/02937d122c86ce73319ef9975b58896fc1b491d1/log4j2_112-116.xml -O ${instdir}log4j2_112-116.xml > /dev/null 2>&1
   cli_args="-Dlog4j.configurationFile=log4j2_112-116.xml"
 fi
-# 1.7-1.11.2
 if [ $(version $mcver) -ge $(version "1.7") ] && [ $(version $mcver) -le $(version "1.11.2") ]; then
   wget https://launcher.mojang.com/v1/objects/dd2b723346a8dcd48e7f4d245f6bf09e98db9696/log4j2_17-111.xml -O ${instdir}log4j2_112-116.xml > /dev/null 2>&1
   cli_args="-Dlog4j.configurationFile=log4j2_17-111.xml"
 fi
-
-###############################################
-# /Patch against exploit within Log4j
-###############################################
-
 
 ###############################################
 # Create the scripts
@@ -1133,44 +980,65 @@ fi
 
 dialog --infobox "Creating scripts..." 3 34 ; sleep 1
 
-# Setup Aikars Flags
 aikars="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true"
 
-# Create the run script
+# Create the run script with dynamic Java selection
 echo '#!/bin/bash
 user=$(whoami); if [[ $user != "'${user}'" ]]; then echo "Cannot run as ${user} - expecting '${user}'"; exit; fi
 cd "$(dirname "$0")"' > ${instdir}server
+
+JAVA_EXEC="/usr/bin/java" # Default fallback
+if [[ -x "/usr/lib/jvm/java-25-openjdk-arm64/bin/java" ]]; then
+    JAVA_25="/usr/lib/jvm/java-25-openjdk-arm64/bin/java"
+elif [[ -x "/usr/lib/jvm/java-25-openjdk-amd64/bin/java" ]]; then
+    JAVA_25="/usr/lib/jvm/java-25-openjdk-amd64/bin/java"
+fi
+
+if [[ -x "/usr/lib/jvm/java-21-openjdk-arm64/bin/java" ]]; then
+    JAVA_21="/usr/lib/jvm/java-21-openjdk-arm64/bin/java"
+elif [[ -x "/usr/lib/jvm/java-21-openjdk-amd64/bin/java" ]]; then
+    JAVA_21="/usr/lib/jvm/java-21-openjdk-amd64/bin/java"
+fi
+
+if [[ -x "/usr/lib/jvm/java-17-openjdk-arm64/bin/java" ]]; then
+    JAVA_17="/usr/lib/jvm/java-17-openjdk-arm64/bin/java"
+elif [[ -x "/usr/lib/jvm/java-17-openjdk-amd64/bin/java" ]]; then
+    JAVA_17="/usr/lib/jvm/java-17-openjdk-amd64/bin/java"
+fi
+
+# Match Minecraft version to Java version
+if [[ "'${mcver}'" == "26.2" ]] && [[ -n "$JAVA_25" ]]; then
+    JAVA_EXEC="$JAVA_25"
+elif [[ "'${mcver}'" == "1.21" || "'${mcver}'" == "1.20.6" ]] && [[ -n "$JAVA_21" ]]; then
+    JAVA_EXEC="$JAVA_21"
+elif [[ -n "$JAVA_17" ]]; then
+    JAVA_EXEC="$JAVA_17"
+fi
+
 if [[ $flavor == "Cuberite" ]]; then
   echo ${instdir}cuberite/Cuberite >> ${instdir}server
 else
-  # Forge requires its own unix_args be included
   if [[ $flavor == "Forge" ]]; then
-    # Forge servers
     forge_args=$(ls ${instdir}libraries/net/minecraftforge/forge/*/unix_args.txt | head -n 1)
     forge_args="@${forge_args}"
-    echo "exec java ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
+    echo "exec \$JAVA_EXEC ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${forge_args}" >> ${instdir}server
   else
-    # Non-forge servers
-    echo "exec java ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
+    echo "exec \$JAVA_EXEC ${cli_args} -Xms${gamememMIN}M -Xmx${gamemem}M ${aikars} -jar `basename $jarfile` nogui" >> ${instdir}server
   fi
 fi
 chmod +x ${instdir}server
 
-# Need to generate the config and EULA
-# Note: Because the EULA is not yet accepted within eula.txt, the server will init and quit immediately.
 if [[ $upgrade == 0 ]] || [[ ! -e ${instdir}server.properties ]]; then
   dialog --infobox "Initializing server..." 3 34 ; sleep 1
   su - $user -c ${instdir}server > /dev/null 2>&1
 fi
 
-# Accepting the EULA
 if [[ $eula == "accepted" ]]; then
   echo "# https://account.mojang.com/documents/minecraft_eula ACCEPTED by user during installation
 # $eula_stamp
 eula=true" > ${instdir}eula.txt
 fi
 
-# Create the safe reboot script
 echo '#!/bin/bash
 if [[ $EUID -ne 0 ]]; then
   echo "ERROR: This script must be run as root" 2>&1
@@ -1182,7 +1050,6 @@ echo "Rebooting."
 /sbin/reboot' > ${instdir}reboot
 chmod +x ${instdir}reboot
 
-# Create the safe stop script
 echo '#!/bin/bash
 user=$(whoami);
 if [[ $user != "'${user}'" ]]; then
@@ -1216,7 +1083,6 @@ echo
 echo "Done. Minecraft has been stopped safely."' > ${instdir}stop
 chmod a+x ${instdir}stop
 
-# Create the service
 echo '#/bin/bash
 set -e
 
@@ -1252,26 +1118,14 @@ esac
 ' > /etc/init.d/pinecraft
 chmod a+x /etc/init.d/pinecraft
 
-# Remove old symlinks
 if [[ -s /etc/rc0.d/K01stop-pinecraft ]]; then
   rm -f /etc/rc0.d/K01stop-pinecraft
 fi
 if [[ -s /etc/rc6.d/K01stop-pinecraft ]]; then
   rm -f /etc/rc6.d/K01stop-pinecraft
 fi
-# Make the stop command run automatically at shutdown
 ln -s ${instdir}stop /etc/rc0.d/K01stop-pinecraft
-# Make the stop command run automatically at reboot
 ln -s ${instdir}stop /etc/rc6.d/K01stop-pinecraft
-
-###############################################
-# /Create the scripts
-###############################################
-
-
-###############################################
-# Create config folders
-###############################################
 
   if [[ ! -d /etc/pinecraft/pid/ ]]; then
     mkdir -p /etc/pinecraft/pid
@@ -1279,22 +1133,11 @@ ln -s ${instdir}stop /etc/rc6.d/K01stop-pinecraft
 
   chown -R $user:$user /etc/pinecraft/
 
-###############################################
-# /Create config folders
-###############################################
-
-
-###############################################
-# Overclock
-###############################################
-
 if [[ ! $oc_freq == 0 ]]; then
   dialog --infobox "Overclocking your system..." 3 34 ; sleep 1
   datestamp=$(date +"%Y-%m-%d_%H-%M-%S")
 
   cp $configfile /boot/config-${datestamp}.txt
-
-  # Replace existing overclock settings or add new ones if none exist
 
   if [[ ! $oc_volt == 0 ]]; then
     /bin/sed -i -- "/over_voltage=/c\over_voltage=${oc_volt}" $configfile
@@ -1320,107 +1163,59 @@ if [[ ! $oc_freq == 0 ]]; then
 
 fi
 
-###############################################
-# /Overclock
-###############################################
-
-
-###############################################
-# Tweak Server Configs
-###############################################
-
 if [[ -e ${instdir}server.properties ]]; then
 
   dialog --infobox "Applying config..." 3 34 ; sleep 1
-  # These settings are my own defaults, so only do these during first install (not upgrade)
-  # Will not replace user-configured changes in the server.properties
   if [[ $upgrade == 0 ]]; then
 
-    # Enable Query
-      # Change the value if it exists
       /bin/sed -i '/enable-query=/c\enable-query=true' ${instdir}server.properties
-      # Add it if it doesn't exist
       if ! grep -q "enable-query=" ${instdir}server.properties; then
         echo "enable-query=true" >> ${instdir}server.properties
       fi
 
-    # Set game difficulty to Normal (default is Easy, but we want at least SOME challenge)
-      # Change the value if it exists
       /bin/sed -i '/difficulty=/c\difficulty=normal' ${instdir}server.properties
-      # Add it if it doesn't exist
       if ! grep -q "difficulty=" ${instdir}server.properties; then
         echo "difficulty=normal" >> ${instdir}server.properties
       fi
 
-    # Set the view distance to something the Raspberry Pi can handle quite well
-      # Change the value if it exists
       /bin/sed -i '/view-distance=/c\view-distance=7' ${instdir}server.properties
-      # Add it if it doesn't exist
       if ! grep -q "view-distance=" ${instdir}server.properties; then
         echo "view-distance=7" >> ${instdir}server.properties
       fi
 
-    # Level Seed
-      # Change the value if it exists
       /bin/sed -i "/level-seed=/c\level-seed=${seed}" ${instdir}server.properties
-      # Add it if it doesn't exist
       if ! grep -q "level-seed=" ${instdir}server.properties; then
         echo "level-seed=${seed}" >> ${instdir}server.properties
       fi
 
   fi
 
-  # These ones, however, are selected by the user, so we'll make these changes even if already installed
-
-    # Game Mode (User Selected During Install)
-      # Change the value if it exists
       /bin/sed -i "/gamemode=/c\gamemode=${gamemode}" ${instdir}server.properties
-      # Add it if it doesn't exist
       if ! grep -q "gamemode=" ${instdir}server.properties; then
         echo "gamemode=${gamemode}" >> ${instdir}server.properties
       fi
 
-    # Level Type (User Selected During Install)
-      # Change the value if it exists
       /bin/sed -i "/level-type=/c\level-type=minecraft:${leveltype}" ${instdir}server.properties
-      # Add it if it doesn't exist
       if ! grep -q "level-type=minecraft:" ${instdir}server.properties; then
         echo "level-type=minecraft:${leveltype}" >> ${instdir}server.properties
       fi
 
 fi
 
-###############################################
-# /Tweak Server Configs
-###############################################
-
-
-# Create a file to later let us know the version of Pinecraft used
 echo $pcver > ${instdir}cat5tv.ver
-
-# Set ownership to the user
 dialog --infobox "Setting ownership..." 3 24
 chown -R $user:$user $instdir
 
-###############################################
-# Install cronjob to auto-start server on boot
-###############################################
-
-# Dump current crontab to tmp file, empty if doesn't exist
   crontab -u $user -l > /tmp/cron.tmp 2>/dev/null
 
   if [[ "$cron" == "1" ]]; then
-    # Remove previous entry (in case it's an old version)
     /bin/sed -i~ "\~${instdir}server~d" /tmp/cron.tmp
-    # Add server to auto-load at boot if doesn't already exist in crontab
     if ! grep -q "minecraft/server" /tmp/cron.tmp; then
       dialog --infobox "Enabling auto-run..." 3 34 ; sleep 1
       printf "\n@reboot /usr/bin/screen -dmS Pinecraft ${instdir}server > /dev/null 2>&1\n" >> /tmp/cron.tmp
       cronupdate=1
     fi
   else
-    # Just in case it was previously enabled, disable it
-    # as this user requested not to auto-run
     /bin/sed -i~ "\~${instdir}server~d" /tmp/cron.tmp
     cronupdate=1
   fi
@@ -1434,33 +1229,22 @@ chown -R $user:$user $instdir
     fi
   fi
 
-  # Import revised crontab
   if [[ "$cronupdate" == "1" ]]
   then
     crontab -u $user /tmp/cron.tmp
   fi
 
-  # Remove temp file
   rm /tmp/cron.tmp
-
-###############################################
-# /Install cronjob to auto-start server on boot
-###############################################
-
-###############################################
-# Run the server now
-###############################################
 
   dialog --infobox "Starting the server..." 3 26 ;
   su - $user -c "/usr/bin/screen -dmS Pinecraft ${instdir}server"
   sleep 3
   dialog --infobox "Initializing config..." 3 26 ;
 
-  # Allow up to 30 seconds for the server to initialize. If still not, resume anyways.
   waited_time=0
   while [[ $waited_time -lt 30 ]]; do
     if [[ -e ${instdir}server.properties ]]; then
-        dialog --infobox "Server is loading..." 3 26 ; # This message signifies a successful install
+        dialog --infobox "Server is loading..." 3 26 ;
         sleep 3
         break
     else
@@ -1469,15 +1253,8 @@ chown -R $user:$user $instdir
     fi
   done
 
-###############################################
-# /Run the server now
-###############################################
-
-# Forge is a bit funny because it doesn't create server.properties file during initialization, so that file is created from assets.
-# However, upon initialization, and 'mods' folder is created, so we will use that to identify if initialization was successful.
 if [[ $flavor == "Forge" ]]; then
   if [[ ! -d ${instdir}mods ]]; then
-    # mods folder not found, so initialization failed. Remove the server.properties asset file so we don't lie about success
     rm ${instdir}server.properties
   fi
 fi
